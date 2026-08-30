@@ -1,0 +1,14 @@
+# --- Core RAG pipeline ---
+sentence-transformers==3.0.1   # local, free embedding model
+faiss-cpu==1.8.0                # local vector database (no server needed)
+pypdf==4.3.1                    # PDF text extraction
+
+# --- LLM integration ---
+anthropic==0.34.2               # Claude API client (primary LLM)
+
+# --- UI ---
+streamlit==1.38.0                # simple web UI (also works as desktop-like app)
+
+# --- Utilities ---
+numpy==1.26.4
+python-dotenv==1.0.1             # load API key from .env file safely
