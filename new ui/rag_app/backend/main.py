@@ -110,7 +110,12 @@ def ask_question(req: AskRequest):
             query=result.trace.query,
             retrieval_trace=retrieval_trace,
             generation_trace=generation_trace,
-            context_text=result.trace.context_text
+            context_text=result.trace.context_text,
+            time_query_embedding=result.trace.time_query_embedding,
+            time_retrieval=result.trace.time_retrieval,
+            time_context_building=result.trace.time_context_building,
+            time_llm_generation=result.trace.time_llm_generation,
+            time_total=result.trace.time_total
         )
         
         return AskResponse(
@@ -119,4 +124,6 @@ def ask_question(req: AskRequest):
             trace=full_trace
         )
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))

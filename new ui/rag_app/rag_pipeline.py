@@ -71,6 +71,13 @@ class AnswerTrace:
     generation_trace: Optional[GenerationTrace]
     context_text: str
     sources: List[SourceInfo]
+    
+    # Timings
+    time_query_embedding: float = 0.0
+    time_retrieval: float = 0.0
+    time_context_building: float = 0.0
+    time_llm_generation: float = 0.0
+    time_total: float = 0.0
 
 
 @dataclass
@@ -159,28 +166,33 @@ class RAGPipeline:
         chat_history: prior turns as [{"role": "user"/"assistant", "content": str}, ...]
                       NOT including the current `query`.
         """
+        import time
+        t_start_total = time.perf_counter()
+        
         if not self.is_ready_to_answer:
             raise RuntimeError("LLM client not configured — call set_api_key() first.")
 
         k = top_k if top_k is not None else self.config.top_k
 
+        # The retrieval inside self.retriever.retrieve also does query embedding.
+        # We can approximate by measuring the whole retrieve block for time_retrieval.
+        t0 = time.perf_counter()
         retrieval = self.retriever.retrieve(
             query, top_k=k, min_score=self.config.similarity_threshold
         )
+        t_retrieval = time.perf_counter() - t0
+
+        t0 = time.perf_counter()
         built = build_context(retrieval.results, max_context_chars=self.config.max_context_chars)
 
-        try:
-            from supercompress import SuperCompress
-            sc = SuperCompress()
-            out = sc.compress(built.context_text, query)
-            final_context = out.compressed_text
-        except Exception as e:
-            print(f"Warning: SuperCompress failed or not installed: {e}")
-            final_context = built.context_text
+        final_context = built.context_text
+        t_context_building = time.perf_counter() - t0
 
+        t0 = time.perf_counter()
         generation = self._llm_client.generate_answer(
             query=query, context_text=final_context, chat_history=chat_history
         )
+        t_llm_generation = time.perf_counter() - t0
 
         sources = [
             SourceInfo(
@@ -192,6 +204,8 @@ class RAGPipeline:
             )
             for item in built.used_chunks
         ]
+        
+        t_total = time.perf_counter() - t_start_total
 
         trace = AnswerTrace(
             query=query,
@@ -199,6 +213,11 @@ class RAGPipeline:
             generation_trace=generation.trace,
             context_text=built.context_text,
             sources=sources,
+            time_query_embedding=0.0, # Part of retrieve
+            time_retrieval=t_retrieval,
+            time_context_building=t_context_building,
+            time_llm_generation=t_llm_generation,
+            time_total=t_total
         )
 
         return AnswerResult(answer=generation.answer, sources=sources, trace=trace)

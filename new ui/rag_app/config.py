@@ -36,8 +36,8 @@ class RAGConfig:
     similarity_threshold: float = 0.15
 
     # ---- LLM settings ----
-    llm_provider: str = "ollama"  # "claude" or "ollama"
-    llm_model: str = "qwen2:0.5b"
+    llm_provider: str = "openrouter"  # "openrouter", "claude" or "ollama"
+    llm_model: str = "meta-llama/llama-3.1-8b-instruct"
     temperature: float = 0.2
     max_tokens: int = 1024
 
@@ -50,17 +50,17 @@ class RAGConfig:
     refusal_phrase: str = "This information was not found in the knowledge base."
 
     system_prompt_template: str = field(default_factory=lambda: (
-        "You are a document question-answering assistant. You must answer "
+        "You are an expert document question-answering assistant. You must answer "
         "ONLY using the CONTEXT provided below, which was retrieved from the "
         "user's uploaded documents. Do not use outside knowledge and do not "
         "guess or invent facts.\n\n"
         "Rules:\n"
         "1. If the answer is present in the context, answer clearly and "
-        "concisely, and refer to which source(s) you used.\n"
+        "concisely.\n"
         "2. If the context does not contain the answer, respond EXACTLY with: "
         "\"{refusal_phrase}\"\n"
-        "3. Never fabricate document names, page numbers, or facts not "
+        "3. NEVER fabricate document names, page numbers, or facts not "
         "present in the context.\n"
-        "4. You may synthesize information across multiple chunks if they "
-        "are all part of the provided context.\n"
+        "4. NEVER output internal labels like 'Context:', 'System:', or 'Answer:'. "
+        "Provide ONLY the final human-readable answer.\n"
     ))

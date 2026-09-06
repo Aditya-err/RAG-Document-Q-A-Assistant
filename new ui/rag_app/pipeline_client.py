@@ -42,6 +42,13 @@ class FullTrace:
     retrieval_trace: RetrievalTrace
     generation_trace: Optional[GenerationTrace]
     context_text: str
+    
+    # Timings
+    time_query_embedding: float = 0.0
+    time_retrieval: float = 0.0
+    time_context_building: float = 0.0
+    time_llm_generation: float = 0.0
+    time_total: float = 0.0
 
 @dataclass
 class GenerationResult:
@@ -89,7 +96,7 @@ class RAGPipelineClient:
     def ingest_file(self, file_bytes: bytes, filename: str) -> IngestResult:
         files = {"file": (filename, file_bytes)}
         try:
-            response = requests.post(f"{self.base_url}/api/ingest", files=files)
+            response = requests.post(f"{self.base_url}/api/ingest", files=files, timeout=60)
             response.raise_for_status()
             data = response.json()
             return IngestResult(
@@ -143,7 +150,7 @@ class RAGPipelineClient:
             "api_key": self.api_key
         }
         try:
-            response = requests.post(f"{self.base_url}/api/ask", json=payload)
+            response = requests.post(f"{self.base_url}/api/ask", json=payload, timeout=60)
             response.raise_for_status()
             data = response.json()
             
@@ -183,7 +190,12 @@ class RAGPipelineClient:
                 query=data["trace"].get("query", query),
                 retrieval_trace=rt,
                 generation_trace=gt,
-                context_text=data["trace"].get("context_text", "")
+                context_text=data["trace"].get("context_text", ""),
+                time_query_embedding=data["trace"].get("time_query_embedding", 0.0),
+                time_retrieval=data["trace"].get("time_retrieval", 0.0),
+                time_context_building=data["trace"].get("time_context_building", 0.0),
+                time_llm_generation=data["trace"].get("time_llm_generation", 0.0),
+                time_total=data["trace"].get("time_total", 0.0)
             )
             
             return GenerationResult(

@@ -50,7 +50,12 @@ def get_pipeline() -> RAGPipelineClient:
     p.config.top_k = st.session_state.top_k
     return p
 
-# ── Backend health (direct – no stale cache) ──────────────────────────────────
+@st.cache_data(ttl=10)
+def cached_list_documents():
+    return get_pipeline().list_documents()
+
+# ── Backend health ────────────────────────────────────────────────────────────
+@st.cache_data(ttl=10)
 def check_health() -> bool:
     try:
         r = _req.get("http://localhost:8000/api/documents", timeout=3)
@@ -102,10 +107,7 @@ def _del(cid):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# CSS — ChatGPT Classic dark
-# KEY FIX: use :has(> span#composer-anchor) to select and fix the actual
-#          Streamlit container block, because st.markdown HTML divs cannot
-#          wrap st.columns children in Streamlit's DOM.
+# CSS — Clean, minimal ChatGPT style
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 st.markdown("""
 <style>
@@ -121,7 +123,6 @@ st.markdown("""
     --txt2:        #B4B4B4;
     --txt3:        #8E8E8E;
     --green:       #10A37F;
-    --user-pill:   #7C5CFC;
 }
 
 /* ── Reset chrome ── */
@@ -148,42 +149,32 @@ html, body, .stApp { background:var(--bg) !important; color:var(--txt) !importan
 
 /* ── Main content: centered, fixed width ── */
 .main .block-container {
-    max-width:780px !important;
+    max-width:800px !important;
     margin:0 auto !important;
-    padding:2rem 1.5rem 160px 1.5rem !important;
+    padding:2rem 1.5rem 120px 1.5rem !important;
 }
 
-/* ── Chat messages reset ── */
-[data-testid="stChatMessage"] { background:transparent !important; border:none !important; padding:10px 0 !important; }
+/* ── Clean native chat layout overrides ── */
+[data-testid="stChatMessage"] {
+    background:transparent !important;
+    border:none !important;
+    padding:1rem 0 !important;
+}
+[data-testid="stChatMessageAvatarUser"] { background:var(--surf) !important; }
+[data-testid="stChatMessageAvatarAssistant"] { background:var(--green) !important; }
 
-/* USER bubble: RIGHT-aligned purple pill */
-[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
-    display:flex !important;
-    flex-direction:row !important;
-    justify-content:flex-end !important;
-    align-items:flex-start !important;
-    gap:0 !important;
+/* ── Chat Action Buttons (remove empty boxes) ── */
+[data-testid="stChatMessage"] .stButton > button {
+    background: transparent !important;
+    border: none !important;
+    padding: 4px !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    min-height: auto !important;
+    width: auto !important;
 }
-[data-testid="stChatMessageAvatarUser"] { display:none !important; }
-[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) .stMarkdown {
-    background:var(--user-pill) !important;
-    color:#fff !important;
-    border-radius:20px 20px 4px 20px !important;
-    padding:12px 18px !important;
-    max-width:72% !important;
-    font-size:15px !important;
-    line-height:1.65 !important;
-}
-[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) .stMarkdown p {
-    color:#fff !important; margin:0 !important;
-}
-
-/* ASSISTANT: plain, no background */
-[data-testid="stChatMessageAvatarAssistant"] {
-    background:var(--surf) !important;
-    border:1px solid var(--bdr) !important;
-    border-radius:6px !important;
-    flex-shrink:0 !important;
+[data-testid="stChatMessage"] .stButton > button:hover {
+    background: rgba(255,255,255,0.08) !important;
 }
 
 /* ── Sidebar buttons ── */
@@ -419,6 +410,8 @@ if st.session_state.view == "chat":
             else:
                 with st.chat_message("assistant"):
                     st.markdown(msg["content"])
+                    if msg.get("timing"):
+                        st.caption(msg["timing"])
                     # Sources
                     sources = msg.get("sources", [])
                     if sources:
@@ -443,7 +436,7 @@ if st.session_state.view == "chat":
                             msg["feedback"] = None if fb=="dislike" else "dislike"; st.rerun()
                     with a3:
                         esc = msg["content"].replace("`","\\`").replace("$","\\$")
-                        components.html(f"""
+                        st.components.v1.html(f"""
                         <style>body{{margin:0;overflow:hidden;}}
                         button{{background:transparent;border:none;width:28px;height:28px;padding:0;
                                border-radius:6px;color:#8E8E8E;cursor:pointer;font-size:16px;transition:.15s;
@@ -451,7 +444,7 @@ if st.session_state.view == "chat":
                         button:hover{{background:rgba(255,255,255,.08);color:#ECECEC;}}</style>
                         <button onclick="navigator.clipboard.writeText(`{esc}`);
                             this.style.color='#10A37F';
-                            setTimeout(()=>this.style.color='#8E8E8E',2000);">📋</button>
+                            setTimeout(()=>this.style.color='#8E8E8E',2000);" title="Copy">📋</button>
                         """, height=28)
 
 
@@ -518,16 +511,29 @@ if st.session_state.view == "chat":
             st.markdown(prompt)
 
         with st.chat_message("assistant"):
-            docs_list = pipeline.list_documents()
+            docs_list = cached_list_documents()
             if not docs_list:
                 ans = "⚠️ No documents indexed yet. Use the **+** button to upload documents."
                 st.markdown(ans)
                 st.session_state.messages.append({"role":"assistant","content":ans,"sources":[]})
             else:
                 try:
-                    with st.spinner("Thinking…"):
+                    with st.status("Generating response...", expanded=True) as status:
+                        st.write("Searching knowledge base...")
                         result = pipeline.ask(query=prompt, chat_history=st.session_state.chat_history)
+                        status.update(label="Response generated", state="complete", expanded=False)
+                        
                     st.markdown(result.answer)
+
+                    tr = result.trace
+                    timing_str = (
+                        f"⏱️ **{tr.time_total:.2f}s** "
+                        f"(Emb: {tr.time_query_embedding:.2f}s | "
+                        f"Ret: {tr.time_retrieval:.2f}s | "
+                        f"Ctx: {tr.time_context_building:.2f}s | "
+                        f"LLM: {tr.time_llm_generation:.2f}s)"
+                    )
+                    st.caption(timing_str)
 
                     srcs = [
                         {"source":s.source,"document_name":s.document_name,
@@ -537,7 +543,8 @@ if st.session_state.view == "chat":
                     st.session_state.messages.append({
                         "id": f"m{int(time.time()*1000)}",
                         "role":"assistant","content":result.answer,
-                        "sources":srcs,"feedback":None
+                        "sources":srcs,"feedback":None,
+                        "timing": timing_str
                     })
                     st.session_state.last_trace = result.trace
                 except Exception as e:
@@ -569,24 +576,23 @@ elif st.session_state.view == "settings":
     p = get_pipeline()
     st.markdown("#### 🧠 Model Configuration")
 
-    use_cloud = st.checkbox("Use Cloud API Key", value=(p.config.llm_provider in ["claude","openai","gemini"]))
+    use_cloud = st.checkbox("Use OpenRouter API Key", value=(p.config.llm_provider == "openrouter"))
     if use_cloud:
-        st.info("Local LLM will be disabled. You'll be billed by your provider.")
-        pvs   = {"Anthropic Claude":"claude","OpenAI GPT":"openai","Google Gemini":"gemini"}
-        cur   = next((k for k,v in pvs.items() if v==p.config.llm_provider),"Anthropic Claude")
-        sname = st.selectbox("Provider", list(pvs.keys()), index=list(pvs.keys()).index(cur))
-        sel   = pvs[sname]
-        dflts = {"claude":"claude-3-5-sonnet-20240620","openai":"gpt-4o","gemini":"gemini-1.5-pro"}
-        hints = {"claude":"sk-ant-...","openai":"sk-...","gemini":"AIzaSy..."}
-        new_k = st.text_input(f"API Key ({hints[sel]})", value=st.session_state.api_key, type="password")
-        new_m = st.text_input("Model", value=p.config.llm_model if p.config.llm_provider==sel else dflts[sel])
+        st.info("Local LLM will be disabled. You'll use OpenRouter's API.")
+        
+        # Pre-fill with the user-provided API key if not already set in session state
+        default_key = st.session_state.api_key if st.session_state.api_key else ""
+        new_k = st.text_input("OpenRouter API Key (sk-or-...)", value=default_key, type="password")
+        
+        # OpenRouter supports many models, e.g. "meta-llama/llama-3.1-8b-instruct:free", "google/gemini-pro"
+        new_m = st.text_input("Model (e.g., meta-llama/llama-3.1-8b-instruct:free)", value=p.config.llm_model if p.config.llm_provider == "openrouter" else "meta-llama/llama-3.1-8b-instruct:free")
         if st.button("Save", type="primary"):
             if new_k.strip():
                 st.session_state.api_key = new_k.strip()
                 p.set_api_key(new_k.strip())
-                p.config.llm_provider = sel
+                p.config.llm_provider = "openrouter"
                 p.config.llm_model = new_m
-                st.success(f"Saved! Using {sname}.")
+                st.success("Saved! Using OpenRouter.")
             else:
                 st.error("Enter a valid API key.")
     else:

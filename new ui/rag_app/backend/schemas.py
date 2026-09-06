@@ -41,6 +41,13 @@ class FullTraceSchema(BaseModel):
     retrieval_trace: RetrievalTraceSchema
     generation_trace: Optional[GenerationTraceSchema] = None
     context_text: str
+    
+    # Timings
+    time_query_embedding: float = 0.0
+    time_retrieval: float = 0.0
+    time_context_building: float = 0.0
+    time_llm_generation: float = 0.0
+    time_total: float = 0.0
 
 class GenerationResultSchema(BaseModel):
     answer: str

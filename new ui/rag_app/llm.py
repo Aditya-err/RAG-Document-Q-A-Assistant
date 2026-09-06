@@ -44,12 +44,6 @@ class GenerationResult:
 class LLMClient:
     def __init__(self, api_key: str, config: RAGConfig):
         self.api_key = api_key
-        self.client = None
-        if config.llm_provider == "claude":
-            self.client = anthropic.Anthropic(
-                api_key=api_key,
-                default_headers={"Accept-Encoding": "identity"}
-            )
         self.config = config
 
     def generate_answer(
@@ -86,29 +80,23 @@ class LLMClient:
 
         messages = list(chat_history) + [{"role": "user", "content": user_turn}]
 
-        if self.config.llm_provider == "claude":
-            response = self.client.messages.create(
-                model=self.config.llm_model,
-                max_tokens=self.config.max_tokens,
-                system=system_prompt,
-                messages=messages,
-            )
-            answer_text = "".join(
-                block.text for block in response.content if block.type == "text"
-            )
-        elif self.config.llm_provider == "openai":
+        if self.config.llm_provider == "openrouter":
             import requests
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json"
             }
-            openai_messages = [{"role": "system", "content": system_prompt}] + messages
+            # OpenRouter recommends passing an HTTP referer and X-Title for ranking (optional but good practice)
+            # headers["HTTP-Referer"] = "YOUR_SITE_URL"
+            # headers["X-Title"] = "YOUR_APP_NAME"
+            
+            openrouter_messages = [{"role": "system", "content": system_prompt}] + messages
             response = requests.post(
-                "https://api.openai.com/v1/chat/completions",
+                "https://openrouter.ai/api/v1/chat/completions",
                 headers=headers,
                 json={
                     "model": self.config.llm_model,
-                    "messages": openai_messages,
+                    "messages": openrouter_messages,
                     "temperature": self.config.temperature,
                     "max_tokens": self.config.max_tokens,
                 },
@@ -116,29 +104,6 @@ class LLMClient:
             )
             response.raise_for_status()
             answer_text = response.json()["choices"][0]["message"]["content"].strip()
-        elif self.config.llm_provider == "gemini":
-            import requests
-            gemini_contents = []
-            for msg in messages:
-                role = "model" if msg["role"] == "assistant" else "user"
-                gemini_contents.append({"role": role, "parts": [{"text": msg["content"]}]})
-            
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.config.llm_model}:generateContent?key={self.api_key}"
-            response = requests.post(
-                url,
-                headers={"Content-Type": "application/json"},
-                json={
-                    "systemInstruction": {"parts": [{"text": system_prompt}]},
-                    "contents": gemini_contents,
-                    "generationConfig": {
-                        "temperature": self.config.temperature,
-                        "maxOutputTokens": self.config.max_tokens,
-                    }
-                },
-                timeout=120
-            )
-            response.raise_for_status()
-            answer_text = response.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
         else:
             import requests
             ollama_messages = [{"role": "system", "content": system_prompt}] + messages
@@ -157,6 +122,13 @@ class LLMClient:
             )
             response.raise_for_status()
             answer_text = response.json().get("message", {}).get("content", "").strip()
+
+        # --- Output Sanitization ---
+        # Some weaker models leak the prompt markers. We strip them here.
+        prefixes_to_strip = ["Context:", "System:", "Answer:", "Assistant:"]
+        for prefix in prefixes_to_strip:
+            if answer_text.startswith(prefix):
+                answer_text = answer_text[len(prefix):].strip()
 
         trace = GenerationTrace(
             system_prompt=system_prompt,
