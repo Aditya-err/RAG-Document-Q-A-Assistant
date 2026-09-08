@@ -147,7 +147,9 @@ class RAGPipelineClient:
         payload = {
             "query": query,
             "chat_history": chat_history or [],
-            "api_key": self.api_key
+            "api_key": self.api_key,
+            "llm_provider": self.config.llm_provider,
+            "llm_model": self.config.llm_model
         }
         try:
             response = requests.post(f"{self.base_url}/api/ask", json=payload, timeout=60)

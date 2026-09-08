@@ -67,7 +67,11 @@ def get_stats():
 
 @app.post("/api/ask", response_model=AskResponse)
 def ask_question(req: AskRequest):
-    if req.api_key:
+    if req.llm_provider:
+        pipeline.config.llm_provider = req.llm_provider
+    if req.llm_model:
+        pipeline.config.llm_model = req.llm_model
+    if req.api_key is not None:
         pipeline.set_api_key(req.api_key)
         
     try:

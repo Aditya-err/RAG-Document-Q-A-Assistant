@@ -12,6 +12,8 @@ class AskRequest(BaseModel):
     query: str
     chat_history: List[Dict[str, str]]
     api_key: Optional[str] = None
+    llm_provider: Optional[str] = None
+    llm_model: Optional[str] = None
 
 class RetrievedChunkSchema(BaseModel):
     source: str

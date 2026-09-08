@@ -427,7 +427,7 @@ if st.session_state.view == "chat":
                     # Actions
                     mid = msg.get("id", str(idx))
                     fb  = msg.get("feedback")
-                    a1, a2, a3, _ = st.columns([0.06, 0.06, 0.06, 0.82])
+                    a1, a2, a3, a4, _ = st.columns([0.06, 0.06, 0.06, 0.06, 0.76])
                     with a1:
                         if st.button("👍" if fb=="like" else "👍🏻", key=f"lk_{mid}", type="tertiary"):
                             msg["feedback"] = None if fb=="like" else "like"; st.rerun()
@@ -446,55 +446,29 @@ if st.session_state.view == "chat":
                             this.style.color='#10A37F';
                             setTimeout(()=>this.style.color='#8E8E8E',2000);" title="Copy">📋</button>
                         """, height=28)
+                    with a4:
+                        esc_speech = msg["content"].replace("`","\\`").replace("$","\\$").replace('"', '&quot;').replace("'", "&#39;")
+                        st.components.v1.html(f"""
+                        <style>body{{margin:0;overflow:hidden;}}
+                        button{{background:transparent;border:none;width:28px;height:28px;padding:0;
+                               border-radius:6px;color:#8E8E8E;cursor:pointer;font-size:16px;transition:.15s;
+                               display:flex;align-items:center;justify-content:center;}}
+                        button:hover{{background:rgba(255,255,255,.08);color:#ECECEC;}}</style>
+                        <button id="tts-btn" onclick="
+                            const btn = document.getElementById('tts-btn');
+                            if(window.speechSynthesis.speaking) {{
+                                window.speechSynthesis.cancel();
+                                btn.innerText = '🔊';
+                                btn.style.color = '#8E8E8E';
+                            }} else {{
+                                const u = new SpeechSynthesisUtterance(`{esc_speech}`);
+                                window.speechSynthesis.speak(u);
+                                btn.innerText = '⏹️';
+                                btn.style.color = '#10A37F';
+                                u.onend = () => {{ btn.innerText = '🔊'; btn.style.color = '#8E8E8E'; }};
+                            }}" title="Read Aloud">🔊</button>
+                        """, height=28)
 
-
-    # ── COMPOSER — always rendered at bottom via :has() CSS ───────────────────
-    with st.container():
-        # This span is the anchor :has() targets in CSS
-        st.markdown('<span id="composer-anchor"></span>', unsafe_allow_html=True)
-
-        cc_plus, cc_form = st.columns([0.07, 0.93])
-
-        with cc_plus:
-            with st.popover("➕", use_container_width=True):
-                st.markdown("**📎 Upload Documents**")
-                uploads = st.file_uploader(
-                    "files", accept_multiple_files=True,
-                    type=["pdf","txt","md","docx"], label_visibility="collapsed"
-                )
-                if uploads:
-                    pipe = get_pipeline()
-                    with st.spinner("Uploading…"):
-                        errs = []
-                        for f in uploads:
-                            res = pipe.ingest_file(f.getvalue(), f.name)
-                            if not res.success:
-                                errs.append(f.name)
-                    if errs:
-                        st.error("Failed: " + ", ".join(errs))
-                    else:
-                        st.success("✅ Uploaded!")
-                st.markdown("---")
-                if st.button("🗑️ Clear chat", use_container_width=True, key="clr"):
-                    if st.session_state.active_conv_id:
-                        st.session_state.messages = []
-                        st.session_state.chat_history = []
-                        _save()
-                    st.rerun()
-
-        with cc_form:
-            with st.form("chat_form", border=False, clear_on_submit=True):
-                fi1, fi2 = st.columns([0.91, 0.09])
-                user_input = fi1.text_input(
-                    "q", label_visibility="collapsed",
-                    placeholder="Ask anything about your documents…"
-                )
-                sent = fi2.form_submit_button("➤", use_container_width=True)
-                if sent and user_input:
-                    if not st.session_state.active_conv_id:
-                        _new_conv()
-                    st.session_state._pending_msg = user_input
-                    st.rerun()
 
     # ── Process pending ───────────────────────────────────────────────────────
     if st.session_state._pending_msg:
@@ -556,6 +530,54 @@ if st.session_state.view == "chat":
         st.session_state.chat_history.append({"role":"assistant","content":st.session_state.messages[-1]["content"]})
         _save()
         st.rerun()
+
+    # ── COMPOSER — always rendered at bottom via :has() CSS ───────────────────
+    with st.container():
+        # This span is the anchor :has() targets in CSS
+        st.markdown('<span id="composer-anchor"></span>', unsafe_allow_html=True)
+
+        cc_plus, cc_form = st.columns([0.07, 0.93])
+
+        with cc_plus:
+            with st.popover("➕", use_container_width=True):
+                st.markdown("**📎 Upload Documents**")
+                uploads = st.file_uploader(
+                    "files", accept_multiple_files=True,
+                    type=["pdf","txt","md","docx"], label_visibility="collapsed"
+                )
+                if uploads:
+                    pipe = get_pipeline()
+                    with st.spinner("Uploading…"):
+                        errs = []
+                        for f in uploads:
+                            res = pipe.ingest_file(f.getvalue(), f.name)
+                            if not res.success:
+                                errs.append(f.name)
+                    if errs:
+                        st.error("Failed: " + ", ".join(errs))
+                    else:
+                        st.success("✅ Uploaded!")
+                st.markdown("---")
+                if st.button("🗑️ Clear chat", use_container_width=True, key="clr"):
+                    if st.session_state.active_conv_id:
+                        st.session_state.messages = []
+                        st.session_state.chat_history = []
+                        _save()
+                    st.rerun()
+
+        with cc_form:
+            with st.form("chat_form", border=False, clear_on_submit=True):
+                fi1, fi2 = st.columns([0.91, 0.09])
+                user_input = fi1.text_input(
+                    "q", label_visibility="collapsed",
+                    placeholder="Ask anything about your documents…"
+                )
+                sent = fi2.form_submit_button("➤", use_container_width=True)
+                if sent and user_input:
+                    if not st.session_state.active_conv_id:
+                        _new_conv()
+                    st.session_state._pending_msg = user_input
+                    st.rerun()
 
 
 # ── LIBRARY ───────────────────────────────────────────────────────────────────
